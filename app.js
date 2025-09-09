@@ -1,108 +1,103 @@
-var html = document.getElementById('html');
-var css = document.getElementById('css');
-var js = document.getElementById('js');
-var code = document.getElementById('output').contentWindow.document;
-function compile() {
-  const PREFIX = 'livecode-';
-  const data = ['html', 'css', 'js'].map((key) => {
-    const prefixedKey = PREFIX + key;
-    const jsonValue = localStorage.getItem(prefixedKey);
+// online-code-editor/app.js
+// Author: Ajith (ajcj7)
+// Professional refactor applying SOLID principles
 
-    if (jsonValue != null) return JSON.parse(jsonValue);
-  });
-  setInitial(data);
-  document.body.onkeyup = function () {
-    localStorage.setItem('livecode-html', JSON.stringify(html.value));
-    localStorage.setItem('livecode-css', JSON.stringify(css.value));
-    localStorage.setItem('livecode-js', JSON.stringify(js.value));
-    code.open();
-    code.writeln(
-      html.value +
-        '<style>' +
-        css.value +
-        '</style>' +
-        '<script>' +
-        js.value +
-        '</script>'
-    );
-    code.close();
-  };
+// Class representing a single code editor section (HTML, CSS, JS)
+class CodePanel {
+  constructor(type, textareaId, clearBtnId, copyBtnId) {
+    this.type = type;
+    this.textarea = document.getElementById(textareaId);
+    this.clearBtn = document.querySelector(clearBtnId);
+    this.copyBtn = document.querySelector(copyBtnId);
+
+    // Single Responsibility: Only panel-specific logic here
+    this.clearBtn.addEventListener('click', () => this.clear());
+    this.copyBtn.addEventListener('click', () => this.copyCode());
+  }
+
+  get value() {
+    return this.textarea.value;
+  }
+
+  set value(val) {
+    this.textarea.value = val;
+  }
+
+  clear() {
+    this.value = '';
+    localStorage.setItem(`livecode-${this.type}`, '');
+    CodeEditorManager.instance.compile();
+  }
+
+  copyCode() {
+    this.textarea.select();
+    document.execCommand('copy');
+    this.showCopied();
+  }
+
+  showCopied() {
+    this.copyBtn.innerText = 'Copied!';
+    setTimeout(() => (this.copyBtn.innerText = 'Copy'), 800);
+  }
 }
 
-function setInitial(data) {
-  let htmlContent = data[0] || '<h1>Welcome to the Live Code Editor made by AJITH!</h1>';
-  let cssContent =
-    data[1] ||
-    `body {
-    background-color: #222;
+// Single Responsibility, Dependency Inversion: 
+// CodeEditorManager only manages app flow, not UI details
+class CodeEditorManager {
+  static instance = null;
+
+  constructor(panels, outputFrameId) {
+    this.panels = panels;
+    this.outputFrame = document.getElementById(outputFrameId).contentWindow.document;
+    CodeEditorManager.instance = this;
+
+    this.registerEvents();
+    this.setInitial();
+    this.compile();
+  }
+
+  registerEvents() {
+    // All code panels trigger compile on any keyup
+    document.body.addEventListener('keyup', () => this.compile());
+  }
+
+  setInitial() {
+    this.panels.forEach(panel => {
+      panel.value =
+        localStorage.getItem(`livecode-${panel.type}`) ||
+        this.getDefault(panel.type);
+    });
+    this.compile();
+  }
+
+  getDefault(type) {
+    switch (type) {
+      case 'html':
+        return `<h1>Welcome to the Live Code Editor!</h1>`;
+      case 'css':
+        return `body { background: #222; color: #fff; } h1 { text-align: center; margin-top: 10%; }`;
+      case 'js':
+      default:
+        return '';
     }
-    h1 {
-      color: #fff;
-      text-align: center;
-      margin-top: 10%;
-    }`;
-  let jsContent = data[2] || '';
-  css.value = cssContent;
-  js.value = jsContent;
-  html.value = htmlContent;
-  code.open();
-  code.writeln(
-    htmlContent +
-      '<style>' +
-      cssContent +
-      '</style>' +
-      '<script>' +
-      jsContent +
-      '</script>'
-  );
-  code.close();
+  }
+
+  compile() {
+    // Save all contents before compiling
+    this.panels.forEach(panel =>
+      localStorage.setItem(`livecode-${panel.type}`, panel.value)
+    );
+
+    this.outputFrame.open();
+    this.outputFrame.writeln(
+      `${this.panels[0].value}<style>${this.panels[1].value}</style><script>${this.panels[2].value}<\/script>`
+    );
+    this.outputFrame.close();
+  }
 }
 
-compile();
-
-document.querySelectorAll('.control').forEach((control) =>
-  control.addEventListener('click', (e) => {
-    e.target.parentElement.parentElement.classList.toggle('collapse');
-    e.target.classList.add('close');
-    e.target.parentElement.querySelector('h2').classList.toggle('hidden');
-  })
-);
-
-document.querySelectorAll('.clear').forEach((clear) =>
-  clear.addEventListener('click', (e) => {
-    const ele = e.target.classList[1];
-    document.querySelector(`#${ele}`).value = '';
-    localStorage.setItem(`livecode-${ele}`, JSON.stringify(''));
-    compile();
-  })
-);
-
-document.querySelectorAll('.copy-btn').forEach((copy) => {
-  copy.addEventListener('click', (e) => {
-    const temp = e.target.innerHTML;
-    e.target.innerText = 'Copied!';
-    setTimeout(function () {
-      e.target.innerHTML = temp;
-    }, 800);
-  });
-});
-
-document.querySelector('.copy-html').addEventListener('click', (e) => {
-  const code = document.querySelector('#html');
-  copyCode(code);
-});
-
-document.querySelector('.copy-css').addEventListener('click', (e) => {
-  const code = document.querySelector('#css');
-  copyCode(code);
-});
-document.querySelector('.copy-js').addEventListener('click', (e) => {
-  const code = document.querySelector('#js');
-  copyCode(code);
-});
-
-function copyCode(code) {
-  code.select();
-  document.execCommand('copy');
-  swal('Copied!', 'You are ready to rock', 'success');
-}
+// Usage: create panels and pass to manager (Liskov Substitution: Panels can be swapped)
+const htmlPanel = new CodePanel('html', 'html', '.clear-html', '.copy-html');
+const cssPanel = new CodePanel('css', 'css', '.clear-css', '.copy-css');
+const jsPanel = new CodePanel('js', 'js', '.clear-js', '.copy-js');
+const manager = new CodeEditorManager([htmlPanel, cssPanel, jsPanel], 'output');
